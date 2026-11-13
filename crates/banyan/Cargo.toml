@@ -1,0 +1,25 @@
+[package]
+name = "banyan"
+description = "Branch-native Postgres: instant copy-on-write database branches behind one endpoint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "banyan"
+path = "src/main.rs"
+
+[dependencies]
+banyan-store = { path = "../banyan-store" }
+banyan-fuse = { path = "../banyan-fuse" }
+anyhow = "1"
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"] }
+clap = { version = "4", features = ["derive", "env"] }
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+libc = "0.2"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "process", "signal", "time", "sync", "macros", "fs"] }

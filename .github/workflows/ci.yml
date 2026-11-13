@@ -32,3 +32,22 @@ jobs:
         run: cargo test --release -p banyan-store --test dst -- --nocapture
         env:
           BANYAN_DST_SEEDS: 1000
+
+  e2e:
+    name: End to end (real Postgres on a FUSE mount)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install FUSE and PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fuse3 postgresql postgresql-contrib
+      - name: Build
+        run: cargo build --release -p banyan
+      - name: End-to-end test
+        run: tests/e2e.sh target/release/banyan
+      - name: Daemon log
+        if: failure()
+        run: cat /tmp/banyan-e2e.*/daemon.log || true
