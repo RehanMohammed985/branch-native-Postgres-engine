@@ -187,6 +187,8 @@ struct Branch {
     next_ino: u64,
     /// Unlinked inodes kept alive because something may still hold them open.
     orphans: HashSet<u64>,
+    /// Changes made to this branch since the volume was opened. Not persisted.
+    writes: u64,
 }
 
 /// One metadata change. The journal is a sequence of these.
@@ -428,6 +430,18 @@ impl Store {
 
     /// Append a record whose effect is already in memory.
     fn journal(&mut self, rec: &Rec) {
+        let touched = match rec {
+            Rec::Fork { .. } | Rec::DeleteBranch { .. } => None,
+            Rec::Create { b, .. }
+            | Rec::Unlink { b, .. }
+            | Rec::Rename { b, .. }
+            | Rec::SetAttr { b, .. }
+            | Rec::Map { b, .. }
+            | Rec::Write { b, .. } => Some(*b),
+        };
+        if let Some(br) = touched.and_then(|b| self.branches.get_mut(&b)) {
+            br.writes += 1;
+        }
         let body = bincode::serialize(rec).expect("record serializes");
         self.jbuf.extend_from_slice(&(body.len() as u32).to_le_bytes());
         self.jbuf.extend_from_slice(&crc32fast::hash(&body).to_le_bytes());
@@ -511,7 +525,7 @@ impl Store {
                 self.next_epoch += 1;
                 self.branches.insert(
                     *id,
-                    Branch { name: name.clone(), parent: parent_name, created: *time, epoch, inodes, next_ino, orphans: HashSet::new() },
+                    Branch { name: name.clone(), parent: parent_name, created: *time, epoch, inodes, next_ino, orphans: HashSet::new(), writes: 0 },
                 );
                 self.names.insert(name.clone(), *id);
                 self.next_branch_id = self.next_branch_id.max(id + 1);
@@ -640,6 +654,12 @@ impl Store {
 
     pub fn branch_id(&self, name: &str) -> Option<BranchId> {
         self.names.get(name).copied()
+    }
+
+    /// A counter that advances whenever anything in the branch changes.
+    /// Two equal readings mean the branch was not written in between.
+    pub fn branch_writes(&self, id: BranchId) -> Option<u64> {
+        self.branches.get(&id).map(|b| b.writes)
     }
 
     pub fn branch_name(&self, id: BranchId) -> Option<&str> {
@@ -811,6 +831,9 @@ impl Store {
             Some(slot) if self.slot_epoch[slot as usize] == epoch => {
                 self.disk.write_block(slot, buf)?;
                 self.write_gen += 1;
+                if let Some(br) = self.branches.get_mut(&b) {
+                    br.writes += 1;
+                }
             }
             _ => {
                 let slot = self.alloc();
