@@ -1,0 +1,14 @@
+[package]
+name = "banyan-store"
+description = "Copy-on-write, branchable block store with O(1) branch creation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+bincode = "1.3"
+crc32fast = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
