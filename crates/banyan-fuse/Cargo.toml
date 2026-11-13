@@ -1,0 +1,14 @@
+[package]
+name = "banyan-fuse"
+description = "FUSE filesystem exposing a banyan volume: one directory per branch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+banyan-store = { path = "../banyan-store" }
+fuser = { version = "0.16", default-features = false }
+libc = "0.2"
+log = "0.4"
