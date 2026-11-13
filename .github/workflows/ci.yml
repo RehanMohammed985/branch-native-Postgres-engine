@@ -51,3 +51,30 @@ jobs:
       - name: Daemon log
         if: failure()
         run: cat /tmp/banyan-e2e.*/daemon.log || true
+
+  image:
+    name: Docker image quick start
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t banyan .
+      - name: Run the README quick start
+        run: |
+          docker run -d --name banyan \
+            --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
+            -p 127.0.0.1:15432:5432 -p 127.0.0.1:18432:8432 banyan
+          for _ in $(seq 1 120); do docker exec banyan banyan status >/dev/null 2>&1 && break; sleep 0.5; done
+          q() { docker exec banyan psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -d "$1" -Atc "$2"; }
+          q main "create table notes(id serial primary key, body text)"
+          q main "insert into notes(body) values ('written on main')"
+          docker exec banyan banyan branch create experiment
+          q experiment "insert into notes(body) values ('only on experiment')"
+          test "$(q experiment 'select count(*) from notes')" = 2
+          test "$(q main 'select count(*) from notes')" = 1
+          curl -fsS localhost:18432/v1/branches
+          docker exec banyan banyan branch delete experiment
+          docker exec banyan banyan gc
+      - name: Container log
+        if: failure()
+        run: docker logs banyan || true
