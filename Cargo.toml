@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/RehanMohammed985/branch-native-Postgres-engine"
+authors = ["Rehan Mohammed"]
+
+[profile.release]
+debug = 1
+
+# The crash simulation runs hundreds of thousands of operations; optimise tests
+# so `cargo test` stays quick.
+[profile.test]
+opt-level = 2
