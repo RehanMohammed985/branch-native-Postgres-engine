@@ -188,23 +188,27 @@ Deleting a branch never affects branches created from it.
 
 ## How it works
 
-```mermaid
-flowchart TB
-    C["psql / any Postgres driver"] -->|"dbname = branch"| P
-    CLI["banyan CLI / HTTP"] --> M
-    subgraph D["banyan daemon"]
-        P["proxy<br/>routes by branch name"]
-        M["manager<br/>starts and stops Postgres per branch"]
-    end
-    P --> PG1["postgres<br/>branch: main"]
-    P --> PG2["postgres<br/>branch: experiment"]
-    M -.->|"start on first connection"| PG1
-    M -.-> PG2
-    PG1 --> F
-    PG2 --> F
-    F["banyan-fuse<br/>/mnt/banyan/&lt;branch&gt;/"] --> S
-    M -->|"fork, delete, gc"| S
-    S["banyan-store<br/>persistent trees, copy-on-write blocks, journal"]
+```
+   psql / any Postgres driver                     banyan CLI / HTTP API
+               |  dbname = branch                           |
+               v                                            v
++----------------------------- banyan daemon ------------------------------+
+|  proxy                              manager                              |
+|  routes by branch name              starts and stops Postgres per branch |
++----------+----------------+------------------------------------+---------+
+           |                |                                    |
+           v                v                                    |
+   postgres (main)   postgres (experiment)   ... on demand       |
+           |                |                                    |
+           v                v                                    | fork
++--------------------- banyan-fuse ----------------------+       | delete
+|  /mnt/banyan/<branch>/      one directory per branch   |       | gc
++---------------------------+----------------------------+       |
+                            |                                    |
+                            v                                    v
++----------------------------- banyan-store -------------------------------+
+|  a persistent tree per branch, copy-on-write 8 KiB blocks, a journal     |
++--------------------------------------------------------------------------+
 ```
 
 **The store** ([`crates/banyan-store`](crates/banyan-store)). Every branch
