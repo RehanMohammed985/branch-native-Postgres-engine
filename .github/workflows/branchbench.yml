@@ -16,6 +16,8 @@ on:
       max_runtime_sec:
         description: "Runtime cap per scenario, in seconds"
         default: "7200"
+  push:
+    branches: [branchbench-full-run]
   pull_request:
     paths:
       - "branchbench/**"
@@ -33,7 +35,7 @@ jobs:
     steps:
       - id: list
         env:
-          SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.scenarios || 'smoke' }}
+          SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.scenarios || github.event_name == 'push' && 'rl_env context_mgmt multi_agent dev_agent ops_agent data_agent verbs' || 'smoke' }}
         run: echo "what=$(printf '%s\n' $SCENARIOS | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   run:
@@ -56,7 +58,7 @@ jobs:
           nproc; free -g | sed -n 2p; df -h / | tail -1
       - name: Run ${{ matrix.what }}
         env:
-          MAX_RUNTIME_SEC: ${{ github.event_name == 'workflow_dispatch' && inputs.max_runtime_sec || '900' }}
+          MAX_RUNTIME_SEC: ${{ github.event_name == 'workflow_dispatch' && inputs.max_runtime_sec || github.event_name == 'push' && '7200' || '900' }}
         run: |
           mkdir -p out && chmod 777 out
           docker run --rm --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
