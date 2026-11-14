@@ -1,0 +1,82 @@
+name: BranchBench
+
+# Runs the official BranchBench engine (github.com/ElaineAng/db-fork, pinned
+# in branchbench/Dockerfile) against Banyan on a GitHub runner.
+#
+# - On pull requests that touch the adapter: the six *_mini scenarios.
+# - On demand (Actions tab, or `gh workflow run branchbench.yml`): the
+#   scenarios you name, one job each. Results are uploaded as artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Space-separated: smoke rl_env context_mgmt multi_agent dev_agent ops_agent data_agent verbs"
+        default: "rl_env context_mgmt multi_agent dev_agent ops_agent data_agent verbs"
+      max_runtime_sec:
+        description: "Runtime cap per scenario, in seconds"
+        default: "7200"
+  pull_request:
+    paths:
+      - "branchbench/**"
+      - ".github/workflows/branchbench.yml"
+
+concurrency:
+  group: branchbench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      what: ${{ steps.list.outputs.what }}
+    steps:
+      - id: list
+        env:
+          SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.scenarios || 'smoke' }}
+        run: echo "what=$(printf '%s\n' $SCENARIOS | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  run:
+    name: ${{ matrix.what }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        what: ${{ fromJson(needs.plan.outputs.what) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          docker build -q -t banyan .
+          docker build -q -t banyan-branchbench branchbench
+      - name: Runner
+        run: |
+          nproc; free -g | sed -n 2p; df -h / | tail -1
+      - name: Run ${{ matrix.what }}
+        env:
+          MAX_RUNTIME_SEC: ${{ github.event_name == 'workflow_dispatch' && inputs.max_runtime_sec || '900' }}
+        run: |
+          mkdir -p out && chmod 777 out
+          docker run --rm --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
+            -e MAX_RUNTIME_SEC \
+            -v "$PWD/branchbench":/adapter:ro -v "$PWD/out":/out \
+            banyan-branchbench /adapter/run.sh ${{ matrix.what }}
+      - name: Summary
+        if: always()
+        run: |
+          docker run --rm -v "$PWD/branchbench":/adapter:ro -v "$PWD/out":/out banyan-branchbench \
+            -c 'cd /opt/db-fork && uv run --frozen --quiet python /adapter/summarize.py /out --json /out/summary.json --check' \
+            | tee summary.txt
+          status=${PIPESTATUS[0]}
+          { echo '```'; cat summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cp summary.txt out/summary.txt
+          exit $status
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branchbench-${{ matrix.what }}
+          path: out/
+          retention-days: 90

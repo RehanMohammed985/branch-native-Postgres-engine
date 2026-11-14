@@ -1,0 +1,9 @@
+{
+  "system": "Banyan",
+  "proprietary": "no",
+  "hosted": "no",
+  "tuned": "no",
+  "tags": ["Rust", "Postgres protocol", "Copy-on-write branches"],
+  "requirements": "A running banyan daemon (Linux with FUSE 3 and PostgreSQL 16) and psql (libpq) on PATH.",
+  "credentials": []
+}
